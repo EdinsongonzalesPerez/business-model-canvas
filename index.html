@@ -4,9 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WonkUp - Business Model Canvas</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- html2pdf para descargas limpias en PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <script>
+        // Convertidor de seguridad para evitar fallos de CORS en el PDF
+        function convertImageToDataURL(imgElement) {
+            if (imgElement.src.startsWith('data:')) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = imgElement.naturalWidth;
+            canvas.height = imgElement.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            try {
+                ctx.drawImage(imgElement, 0, 0);
+                imgElement.src = canvas.toDataURL('image/png');
+                imgElement.removeAttribute('crossorigin');
+            } catch (e) {
+                console.warn("Se activará el respaldo de texto para el logo en PDF:", e);
+            }
+        }
+
+        // Manejo ultra seguro de logos rotos o no encontrados
+        function handleImageError(imgElement, fallbackId) {
+            imgElement.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+            imgElement.classList.add('hidden');
+            const fallback = document.getElementById(fallbackId);
+            if (fallback) fallback.classList.remove('hidden');
+        }
+
+        // Mostrar texto de respaldo si el logo principal falla
+        function showTextLogoFallback() {
+            handleImageError(document.getElementById('header-logo'), 'text-logo-fallback');
+        }
+    </script>
+    
     <style>
         :root {
             --wonkup-cielo: #50a8f3;
@@ -27,6 +62,13 @@
             border: 2px solid #cbd5e1;
             padding: 0.75rem;
             position: relative;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        /* Destacar bloque contenedor al arrastrar sobre él */
+        .canvas-block.dragover {
+            border-color: #50a8f3 !important;
+            background-color: rgba(80, 168, 243, 0.05) !important;
         }
         
         /* Encabezados de los bloques */
@@ -52,6 +94,11 @@
             animation: fadeIn 0.2s ease-in-out;
             word-wrap: break-word;
             padding-right: 2.2rem; /* Espacio para los botones de editar/borrar */
+            cursor: grab;
+        }
+        .post-it:active {
+            cursor: grabbing;
+            opacity: 0.8;
         }
         
         /* Efecto de doblez en la esquina del post-it */
@@ -111,17 +158,12 @@
     <header class="bg-white shadow-md px-6 py-4 flex justify-between items-center z-50 flex-shrink-0 no-print">
         <div class="flex items-center gap-3">
             <!-- Imagen del Logo Oficial de WonkUp (con detector de error automático) -->
-            <img id="header-logo" crossorigin="anonymous" src="logo_wonkup.png" onload="convertImageToDataURL(this)" alt="WonkUp Incubadora" class="h-11 w-auto object-contain" onerror="showTextLogoFallback()">
+            <img id="header-logo" crossorigin="anonymous" src="logo_wonkup.png" onload="convertImageToDataURL(this)" alt="WonkUp" class="h-11 w-auto object-contain" onerror="showTextLogoFallback()">
             
             <!-- Logo en texto de respaldo (Oculto si la imagen carga correctamente) -->
-            <div id="text-logo-fallback" class="hidden flex items-center gap-3">
-                <div class="bg-[#f1c22d] text-white p-2.5 rounded-lg flex items-center justify-center shadow-md">
-                    <i class="fas fa-rocket text-slate-900 text-xl animate-bounce"></i>
-                </div>
-                <div>
-                    <h1 class="text-2xl font-black text-[#50a8f3]">WONK<span class="text-[#f1c22d]">UP</span></h1>
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Incubadora de Negocios</p>
-                </div>
+            <div id="text-logo-fallback" class="hidden flex items-center gap-2">
+                <div class="bg-[#f1c22d] text-slate-900 px-2 py-1 rounded font-black text-sm">W</div>
+                <h1 class="text-xl font-black text-[#50a8f3]">WONK<span class="text-[#f1c22d]">UP</span></h1>
             </div>
         </div>
         <div class="flex gap-3">
@@ -137,27 +179,31 @@
         <!-- LIENZO DEL PDF -->
         <div id="pdf-canvas" class="bg-white shadow-2xl p-6 canvas-container flex flex-col gap-4">
             
-            <!-- Cabecera del Documento -->
-            <div class="flex justify-between items-end border-b-2 border-slate-300 pb-4">
-                <div>
-                    <h2 class="text-3xl font-extrabold text-slate-800 uppercase tracking-wide">Lienzo de Modelo de Negocio</h2>
-                    <div class="flex gap-4 mt-2">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-bold text-slate-500">Proyecto:</span>
-                            <input type="text" class="border-b border-slate-400 bg-transparent px-1 outline-none focus:border-[#50a8f3] w-64 text-slate-700 font-semibold" placeholder="Nombre de la idea...">
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-bold text-slate-500">Diseñado por:</span>
-                            <input type="text" class="border-b border-slate-400 bg-transparent px-1 outline-none focus:border-[#50a8f3] w-64 text-slate-700 font-semibold" placeholder="Nombres del equipo...">
-                        </div>
+            <!-- Cabecera del Documento (Unificada y protegida contra cortes de PDF) -->
+            <div class="flex justify-between items-center border-b-2 border-slate-200 pb-4">
+                <!-- Título alineado a la izquierda (en dos líneas estables) -->
+                <div class="text-left flex flex-col justify-center min-w-[180px]">
+                    <div class="text-lg md:text-xl font-black text-[#50a8f3] uppercase tracking-wide leading-none whitespace-nowrap">BUSINESS</div>
+                    <div class="text-lg md:text-xl font-black text-[#f1c22d] uppercase tracking-wide leading-none mt-1 whitespace-nowrap">MODEL CANVAS</div>
+                </div>
+
+                <!-- Inputs Centrales Ampliados -->
+                <div class="flex flex-col sm:flex-row gap-6 w-full lg:flex-grow justify-center items-center px-4">
+                    <div class="w-full max-w-xs text-center font-semibold">
+                        <label class="block text-[11px] font-extrabold text-[#50a8f3] uppercase tracking-wider mb-1"><i class="fas fa-lightbulb mr-1"></i> Idea:</label>
+                        <input type="text" class="w-full border-b-2 border-slate-200 bg-slate-50/50 p-2 text-sm rounded outline-none focus:border-[#50a8f3] text-center font-semibold text-slate-700 transition-all focus:bg-white" placeholder="Ej: App de tutorías escolares...">
+                    </div>
+                    <div class="w-full max-w-md text-center font-semibold">
+                        <label class="block text-[11px] font-extrabold text-[#f1c22d] uppercase tracking-wider mb-1"><i class="fas fa-users mr-1"></i> Team:</label>
+                        <input type="text" class="w-full border-b-2 border-slate-200 bg-slate-50/50 p-2 text-sm rounded outline-none focus:border-[#f1c22d] text-center font-semibold text-slate-700 transition-all focus:bg-white" placeholder="Escribe los nombres...">
                     </div>
                 </div>
-                <!-- Cabecera derecha con logo para el PDF -->
-                <div class="text-right flex flex-col items-end">
-                    <img id="pdf-logo" crossorigin="anonymous" src="logo_wonkup.png" onload="convertImageToDataURL(this)" alt="WonkUp" class="h-10 w-auto object-contain mb-1" onerror="handleImageError(this, 'pdf-text-logo')">
+
+                <!-- Cabecera derecha con logo para el PDF (Sin textos de Incubadora redundantes) -->
+                <div class="flex flex-col items-center lg:items-end lg:w-1/5 flex-shrink-0">
+                    <img id="pdf-logo" crossorigin="anonymous" src="logo_wonkup.png" onload="convertImageToDataURL(this)" alt="WonkUp" class="h-9 w-auto object-contain" onerror="handleImageError(this, 'pdf-text-logo')">
                     <div id="pdf-text-logo" class="hidden text-right">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Iniciativa de</span>
-                        <span class="text-base font-black text-[#50a8f3]">WONK<span class="text-[#f1c22d]">UP</span></span>
+                        <span class="text-xs font-black text-[#50a8f3]">WONK<span class="text-[#f1c22d]">UP</span></span>
                     </div>
                 </div>
             </div>
@@ -166,7 +212,7 @@
             <div class="grid grid-cols-10 grid-rows-[minmax(220px,_auto)_minmax(220px,_auto)_minmax(180px,_auto)] gap-0 border-2 border-slate-300 rounded-lg overflow-hidden bg-slate-300">
                 
                 <!-- 1. Socios Clave (Col 1-2, Row 1-2) -->
-                <div class="col-span-2 row-span-2 canvas-block" id="block-socios" style="margin: 1px;">
+                <div class="col-span-2 row-span-2 canvas-block" id="block-socios" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'socios')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">🤝</span> Socios Clave</h3>
@@ -178,7 +224,7 @@
                 </div>
 
                 <!-- 2. Actividades Clave (Col 3-4, Row 1) -->
-                <div class="col-span-2 row-span-1 canvas-block" id="block-actividades" style="margin: 1px;">
+                <div class="col-span-2 row-span-1 canvas-block" id="block-actividades" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'actividades')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">🛠️</span> Actividades</h3>
@@ -190,7 +236,7 @@
                 </div>
 
                 <!-- 3. Propuesta de Valor (Col 5-6, Row 1-2) - ENFOQUE PULL: PASO 2 EN AZUL CIELO WONKUP -->
-                <div class="col-span-2 row-span-2 canvas-block bg-[#50a8f3]/5 border-l-2 border-r-2 border-[#50a8f3]/30" id="block-valor" style="margin: 1px;">
+                <div class="col-span-2 row-span-2 canvas-block bg-[#50a8f3]/5 border-l-2 border-r-2 border-[#50a8f3]/30" id="block-valor" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'valor')">
                     <div class="block-header border-[#50a8f3]/20">
                         <div>
                             <span class="text-[9px] font-black text-white bg-[#50a8f3] px-2 py-0.5 rounded-full uppercase tracking-wider block w-max mb-1">Paso 2: La Solución</span>
@@ -203,7 +249,7 @@
                 </div>
 
                 <!-- 4. Relaciones con Clientes (Col 7-8, Row 1) -->
-                <div class="col-span-2 row-span-1 canvas-block" id="block-relaciones" style="margin: 1px;">
+                <div class="col-span-2 row-span-1 canvas-block" id="block-relaciones" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'relaciones')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">❤️</span> Relaciones</h3>
@@ -215,7 +261,7 @@
                 </div>
 
                 <!-- 5. Segmentos de Clientes (Col 9-10, Row 1-2) - ENFOQUE PULL: PASO 1 EN AMARILLO DORADO WONKUP -->
-                <div class="col-span-2 row-span-2 canvas-block bg-[#f1c22d]/5 border-l-2 border-r-2 border-[#f1c22d]/30" id="block-segmentos" style="margin: 1px;">
+                <div class="col-span-2 row-span-2 canvas-block bg-[#f1c22d]/5 border-l-2 border-r-2 border-[#f1c22d]/30" id="block-segmentos" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'segmentos')">
                     <div class="block-header border-[#f1c22d]/20">
                         <div>
                             <span class="text-[9px] font-black text-slate-900 bg-[#f1c22d] px-2 py-0.5 rounded-full uppercase tracking-wider block w-max mb-1">Paso 1: El Cliente</span>
@@ -228,7 +274,7 @@
                 </div>
 
                 <!-- 6. Recursos Clave (Col 3-4, Row 2) -->
-                <div class="col-span-2 row-span-1 canvas-block" id="block-recursos" style="margin: 1px;">
+                <div class="col-span-2 row-span-1 canvas-block" id="block-recursos" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'recursos')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">🧩</span> Recursos</h3>
@@ -240,7 +286,7 @@
                 </div>
 
                 <!-- 7. Canales (Col 7-8, Row 2) -->
-                <div class="col-span-2 row-span-1 canvas-block" id="block-canales" style="margin: 1px;">
+                <div class="col-span-2 row-span-1 canvas-block" id="block-canales" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'canales')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">🚀</span> Canales</h3>
@@ -252,7 +298,7 @@
                 </div>
 
                 <!-- 8. Estructura de Costes (Col 1-5, Row 3) -->
-                <div class="col-span-5 row-span-1 canvas-block" id="block-costes" style="margin: 1px;">
+                <div class="col-span-5 row-span-1 canvas-block" id="block-costes" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'costes')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">💸</span> Estructura de Costes</h3>
@@ -264,7 +310,7 @@
                 </div>
 
                 <!-- 9. Vías de Ingresos (Col 6-10, Row 3) -->
-                <div class="col-span-5 row-span-1 canvas-block" id="block-ingresos" style="margin: 1px;">
+                <div class="col-span-5 row-span-1 canvas-block" id="block-ingresos" style="margin: 1px;" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'ingresos')">
                     <div class="block-header">
                         <div>
                             <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide"><span class="text-lg mr-1">💰</span> Vías de Ingresos</h3>
@@ -282,24 +328,24 @@
     <!-- MODALES DE UI -->
     
     <!-- Modal de Mensajes / Errores -->
-    <div id="msg-modal" class="hidden fixed inset-0 z-[110] bg-slate-900/60 flex justify-center items-center backdrop-blur-sm">
+    <div id="msg-modal" class="hidden fixed inset-0 z-[110] bg-slate-900/60 flex justify-center items-center backdrop-blur-sm font-sans">
         <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 m-4">
-            <h3 id="msg-title" class="text-xl font-bold text-slate-800 mb-2">Mensaje</h3>
-            <p id="msg-body" class="text-slate-600 mb-6"></p>
-            <div class="flex justify-end">
-                <button onclick="closeModal('msg-modal')" class="bg-[#50a8f3] hover:bg-[#3ca0f0] text-white font-semibold py-2 px-6 rounded transition-colors">Entendido</button>
+            <h3 id="msg-title" class="text-xl font-bold text-slate-800 mb-2 font-sans">Mensaje</h3>
+            <p id="msg-body" class="text-slate-600 mb-6 font-sans"></p>
+            <div class="flex justify-end font-sans">
+                <button onclick="closeModal('msg-modal')" class="bg-[#50a8f3] hover:bg-[#3ca0f0] text-white font-semibold py-2 px-6 rounded transition-colors font-sans">Entendido</button>
             </div>
         </div>
     </div>
 
     <!-- Modal Agregar/Editar Nota Manual -->
-    <div id="add-note-modal" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex justify-center items-center backdrop-blur-sm">
+    <div id="add-note-modal" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex justify-center items-center backdrop-blur-sm font-sans">
         <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 m-4 relative">
-            <h3 id="modal-title" class="text-lg font-bold text-slate-800 mb-4">Añadir Nueva Idea</h3>
-            <textarea id="manual-note-input" rows="3" class="w-full border-2 border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:border-[#50a8f3] mb-4 resize-none" placeholder="Escribe tu idea aquí..."></textarea>
+            <h3 id="modal-title" class="text-lg font-bold text-slate-800 mb-4 font-sans">Añadir Nueva Idea</h3>
+            <textarea id="manual-note-input" rows="3" class="w-full border-2 border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:border-[#50a8f3] mb-4 resize-none font-sans" placeholder="Escribe tu idea aquí..."></textarea>
             
             <div class="mb-4">
-                <p class="text-xs text-slate-500 mb-2 font-bold uppercase">Color del Post-it</p>
+                <p class="text-xs text-slate-500 mb-2 font-bold uppercase font-sans">Color del Post-it</p>
                 <div class="flex gap-2">
                     <button class="w-6 h-6 rounded-full bg-[#f1c22d]/40 border-2 border-transparent hover:border-slate-400 focus:border-slate-800 color-pick-btn" data-color="bg-yellow-200" title="Amarillo WonkUp"></button>
                     <button class="w-6 h-6 rounded-full bg-[#50a8f3]/40 border-2 border-transparent hover:border-slate-400 focus:border-slate-800 color-pick-btn" data-color="bg-blue-200" title="Cielo WonkUp"></button>
@@ -309,9 +355,9 @@
                 </div>
             </div>
 
-            <div class="flex justify-end gap-2">
-                <button onclick="closeModal('add-note-modal')" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded transition-colors">Cancelar</button>
-                <button id="submit-btn" onclick="submitManualNote()" class="bg-[#50a8f3] hover:bg-[#3ca0f0] text-white font-semibold py-2 px-6 rounded transition-colors">Añadir</button>
+            <div class="flex justify-end gap-2 font-sans">
+                <button onclick="closeModal('add-note-modal')" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded transition-colors font-sans">Cancelar</button>
+                <button id="submit-btn" onclick="submitManualNote()" class="bg-[#50a8f3] hover:bg-[#3ca0f0] text-white font-semibold py-2 px-6 rounded transition-colors font-sans">Añadir</button>
             </div>
         </div>
     </div>
@@ -321,6 +367,35 @@
         let currentTargetBlock = null;
         let selectedColor = 'bg-yellow-200';
         let editingPostIt = null; // Guardará la referencia si estamos editando un post-it existente
+
+        // Manejo de Drag and Drop
+        function allowDrop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('dragover');
+        }
+
+        function dragLeave(ev) {
+            ev.currentTarget.classList.remove('dragover');
+        }
+
+        function handleDragStart(ev) {
+            ev.dataTransfer.setData("text/plain", ev.target.id);
+        }
+
+        function handleDrop(ev, blockId) {
+            ev.preventDefault();
+            const blockElement = document.getElementById(`block-${blockId}`);
+            if (blockElement) {
+                blockElement.classList.remove('dragover');
+            }
+            const container = document.querySelector(`#block-${blockId} .notes-container`);
+            const noteId = ev.dataTransfer.getData("text/plain");
+            const noteElement = document.getElementById(noteId);
+            
+            if (noteElement && container) {
+                container.appendChild(noteElement);
+            }
+        }
 
         // Manejo de UI de Modales
         function showMsg(title, body) {
@@ -334,7 +409,6 @@
 
         // Convertidor de imagen a DataURL de seguridad (CORS y offline Proof)
         function convertImageToDataURL(imgElement) {
-            // Si ya es un Data URL (base64) no hacemos nada
             if (imgElement.src.startsWith('data:')) return;
             
             const canvas = document.createElement('canvas');
@@ -345,7 +419,6 @@
                 ctx.drawImage(imgElement, 0, 0);
                 const dataURL = canvas.toDataURL('image/png');
                 imgElement.src = dataURL;
-                // Una vez convertida a Data URL, eliminamos el atributo de crossorigin para evitar re-validación
                 imgElement.removeAttribute('crossorigin');
             } catch (e) {
                 console.warn("No se pudo convertir el logo a Data URL. Se usará el respaldo de texto durante la exportación:", e);
@@ -354,11 +427,9 @@
 
         // Manejo ultra seguro de logos rotos para evitar que bloqueen el canvas de exportación
         function handleImageError(imgElement, fallbackId) {
-            // Reemplazar la URL rota por un pixel transparente en base64 para evitar bloqueos de red y CORS en html2canvas
             imgElement.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
             imgElement.classList.add('hidden');
             
-            // Mostrar la alternativa institucional en texto
             const fallback = document.getElementById(fallbackId);
             if (fallback) fallback.classList.remove('hidden');
         }
@@ -392,7 +463,6 @@
             currentTargetBlock = blockId;
             editingPostIt = null; // Resetear modo edición
             
-            // Ajustar textos para creación
             document.getElementById('modal-title').innerText = 'Añadir Nueva Idea';
             document.getElementById('submit-btn').innerText = 'Añadir';
             document.getElementById('manual-note-input').value = '';
@@ -408,11 +478,9 @@
             editingPostIt = postIt; // Referenciar la nota que vamos a editar
             currentTargetBlock = null;
             
-            // Ajustar textos para edición
             document.getElementById('modal-title').innerText = 'Editar Idea';
             document.getElementById('submit-btn').innerText = 'Guardar Cambios';
             
-            // Cargar contenido y color actuales
             const currentText = postIt.dataset.rawText || '';
             const currentColor = postIt.dataset.color || 'bg-yellow-200';
             
@@ -432,7 +500,6 @@
             }
 
             if (editingPostIt) {
-                // Modo Edición: Actualizar nota existente
                 editingPostIt.dataset.rawText = text;
                 editingPostIt.dataset.color = selectedColor;
                 editingPostIt.className = `post-it ${selectedColor} relative group`;
@@ -440,20 +507,23 @@
                 const formattedText = text.replace(/\n/g, '<br>');
                 editingPostIt.querySelector('.post-it-content').innerHTML = formattedText;
             } else {
-                // Modo Creación: Crear nota nueva
                 createPostIt(currentTargetBlock, text, selectedColor);
             }
 
             closeModal('add-note-modal');
         }
 
-        // Crear elemento DOM del post-it
+        // Crear elemento DOM del post-it (Ahora 100% Arrastrable)
         function createPostIt(blockId, text, colorClass = 'bg-yellow-200') {
             const container = document.querySelector(`#block-${blockId} .notes-container`);
             if(!container) return;
 
+            const postItId = 'note-' + Date.now() + Math.floor(Math.random() * 100);
             const postIt = document.createElement('div');
-            // 'group' nos permite mostrar los botones de editar/borrar solo en hover
+            
+            postIt.id = postItId;
+            postIt.draggable = true;
+            postIt.addEventListener('dragstart', handleDragStart);
             postIt.className = `post-it ${colorClass} relative group`;
             postIt.dataset.rawText = text;
             postIt.dataset.color = colorClass;
@@ -461,8 +531,8 @@
             const formattedText = text.replace(/\n/g, '<br>');
 
             postIt.innerHTML = `
-                <div class="post-it-content pr-6">${formattedText}</div>
-                <div class="absolute top-1 right-1 flex gap-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-white/40 backdrop-blur-sm rounded px-1 py-0.5">
+                <div class="post-it-content pr-6 font-semibold">${formattedText}</div>
+                <div class="absolute top-1 right-1 flex gap-[2px] opacity-0 group-hover:opacity-100 transition-opacity bg-white/40 backdrop-blur-sm rounded px-1 py-0.5 no-print">
                     <i class="fas fa-pencil-alt text-slate-600 hover:text-indigo-700 cursor-pointer text-[11px] p-1" onclick="editPostIt(this)" title="Editar nota"></i>
                     <i class="fas fa-times text-slate-600 hover:text-red-600 cursor-pointer text-[11px] p-1" onclick="this.closest('.post-it').remove()" title="Eliminar nota"></i>
                 </div>
@@ -475,12 +545,10 @@
             const canvas = document.getElementById('pdf-canvas');
             canvas.classList.add('exporting');
 
-            // Esperamos un instante (100ms) para que el navegador oculte los botones antes de medir las dimensiones
             setTimeout(() => {
                 let width = canvas.offsetWidth;
                 let height = canvas.offsetHeight;
 
-                // Fallback de seguridad si el navegador retorna 0 (común en previsualizaciones, iframes o móviles)
                 if (!width || width < 300) width = 1150;
                 if (!height || height < 300) height = 800;
 
@@ -489,7 +557,6 @@
                     filename:     'Business_Model_Canvas_WonkUp.pdf',
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { scale: 2, useCORS: true, logging: false },
-                    // El tamaño del PDF se ajusta de forma dinámica o mediante el fallback de seguridad
                     jsPDF:        { unit: 'px', format: [width, height], orientation: 'landscape', hotfixes: ['px_scaling'] }
                 };
 
@@ -497,7 +564,6 @@
                     canvas.classList.remove('exporting');
                 }).catch(err => {
                     console.error("Error al exportar PDF:", err);
-                    // Asegura que los botones vuelvan a aparecer si ocurre algún fallo
                     canvas.classList.remove('exporting');
                     showMsg("Error", "No se pudo generar el PDF en este navegador. Por favor, vuelve a intentarlo.");
                 });
@@ -507,8 +573,8 @@
         // Cargar notas demostrativas al iniciar la web con colores de WonkUp
         window.onload = function() {
             setTimeout(() => {
-                createPostIt('segmentos', 'Estudiantes de secundaria con ganas de emprender.', 'bg-blue-200');
-                createPostIt('valor', 'Un lienzo interactivo súper visual de la Incubadora WonkUp.', 'bg-yellow-200');
+                createPostIt('segmentos', 'Estudiantes de secundaria con ganas de emprender.', 'bg-yellow-200');
+                createPostIt('valor', 'Un lienzo interactivo de la Incubadora WonkUp con post-its arrastrables.', 'bg-blue-200');
             }, 300);
         };
     </script>
